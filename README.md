@@ -1,6 +1,6 @@
 # Abnormal File Vault
 
-A full-stack file management application built with React and Django, designed for efficient file handling and storage.
+A Django-based file management application designed for efficient file handling and storage.
 
 ## 🚀 Technology Stack
 
@@ -11,13 +11,6 @@ A full-stack file management application built with React and Django, designed f
 - Gunicorn (WSGI HTTP Server)
 - WhiteNoise (Static file serving)
 
-### Frontend
-- React 18 with TypeScript
-- TanStack Query (React Query) for data fetching
-- Axios for API communication
-- Tailwind CSS for styling
-- Heroicons for UI elements
-
 ### Infrastructure
 - Docker and Docker Compose
 - Local file storage with volume mounting
@@ -26,7 +19,6 @@ A full-stack file management application built with React and Django, designed f
 
 Before you begin, ensure you have installed:
 - Docker (20.10.x or higher) and Docker Compose (2.x or higher)
-- Node.js (18.x or higher) - for local development
 - Python (3.9 or higher) - for local development
 
 ## 🛠️ Installation & Setup
@@ -67,27 +59,8 @@ docker-compose up --build
    python manage.py runserver
    ```
 
-#### Frontend Setup
-1. **Install dependencies**
-   ```bash
-   cd frontend
-   npm install
-   ```
-
-2. **Create environment file**
-   Create `.env.local`:
-   ```
-   REACT_APP_API_URL=http://localhost:8000/api
-   ```
-
-3. **Start development server**
-   ```bash
-   npm start
-   ```
-
 ## 🌐 Accessing the Application
 
-- Frontend Application: http://localhost:3000
 - Backend API: http://localhost:8000/api
 
 ## 📝 API Documentation
@@ -130,29 +103,21 @@ file-hub/
 │   │   └── serializers.py # Data serialization
 │   ├── core/              # Project settings
 │   └── requirements.txt   # Python dependencies
-├── frontend/              # React frontend
-│   ├── src/
-│   │   ├── components/    # React components
-│   │   ├── services/      # API services
-│   │   └── types/         # TypeScript types
-│   └── package.json      # Node.js dependencies
 └── docker-compose.yml    # Docker composition
 ```
 
 ## 🔧 Development Features
 
-- Hot reloading for both frontend and backend
-- React Query DevTools for debugging data fetching
-- TypeScript for better development experience
-- Tailwind CSS for rapid UI development
+- Hot reloading for backend development
+- Django Debug Toolbar for debugging
+- SQLite for easy development
 
 ## 🐛 Troubleshooting
 
 1. **Port Conflicts**
    ```bash
-   # If ports 3000 or 8000 are in use, modify docker-compose.yml or use:
-   # Frontend: npm start -- --port 3001
-   # Backend: python manage.py runserver 8001
+   # If port 8000 is in use, modify docker-compose.yml or use:
+   python manage.py runserver 8001
    ```
 
 2. **File Upload Issues**
@@ -199,7 +164,7 @@ file-hub/
 3. Verify your submission zip file:
    - Extract the zip file to a new directory
    - Ensure all necessary files are included
-   - Verify that no unnecessary files (like node_modules, __pycache__, etc.) are included
+   - Verify that no unnecessary files (like __pycache__, etc.) are included
    - Test the application from the extracted files to ensure everything works
 
 ## Video Documentation Requirement

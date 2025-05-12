@@ -39,7 +39,6 @@ INSTALLED_APPS = [
   "django.contrib.messages",
   "django.contrib.staticfiles",
   "rest_framework",
-  "corsheaders",
   "files",
 ]
 
@@ -47,7 +46,6 @@ MIDDLEWARE = [
   "django.middleware.security.SecurityMiddleware",
   "whitenoise.middleware.WhiteNoiseMiddleware",
   "django.contrib.sessions.middleware.SessionMiddleware",
-  "corsheaders.middleware.CorsMiddleware",
   "django.middleware.common.CommonMiddleware",
   "django.middleware.csrf.CsrfViewMiddleware",
   "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -145,7 +143,3 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.FormParser',
     ],
 }
-
-# CORS settings
-CORS_ALLOW_ALL_ORIGINS = True  # Configure appropriately in production
-CORS_ALLOW_CREDENTIALS = True
