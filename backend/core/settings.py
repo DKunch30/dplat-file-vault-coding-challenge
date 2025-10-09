@@ -26,11 +26,11 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-default-key-fo
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = ['*']  # Configure appropriately in production
+ALLOWED_HOSTS = ['*']  # Fine for local/Docker, Configure appropriately in production
 
 
 # Application definition
-
+# Usual Djanogo stack plus DRF and files app
 INSTALLED_APPS = [
   "django.contrib.admin",
   "django.contrib.auth",

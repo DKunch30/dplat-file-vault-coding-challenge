@@ -14,12 +14,24 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+
+"""
+Project-level URL routing.
+
+- /admin/ : Django admin (dev tooling)
+- /api/   : All API endpoints, delegated to the `files` app.
+- static(settings.MEDIA_URL) : Serve uploaded files from MEDIA_ROOT in development.
+"""
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
+# Project router matches the /api/… prefix 
+# and delegates to the files app’s URL config:
 urlpatterns = [
+    # 1) Admin site URL (useful for DB inspection in dev)
     path('admin/', admin.site.urls),
+    # 2) Delegate all /api/* paths to the files app
     path('api/', include('files.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
