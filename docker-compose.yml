@@ -1,20 +1,26 @@
-services:
-  backend:
+services: #defining set of containers Docker Compose will run
+  backend: # defining service name 
+    # telling compose to buiild image from ./backend directory
+    # using file named Dockerfile there (instead of prebuilt image)
     build: 
-      context: ./backend
+      context: ./backend 
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "8000:8000" # mapping port 8000 on host to port 8000 in container
     volumes:
-      - backend_storage:/app/media
-      - backend_static:/app/staticfiles
-      - backend_data:/app/data
+      # mounting three named volumes into the container
+      # uploaded files and DB do not disappear when rebuilt
+      - backend_storage:/app/media # mapping volume for media files
+      - backend_static:/app/staticfiles # mapping volume for static files
+      - backend_data:/app/data # mapping volume for data files
     environment:
-      - DJANGO_DEBUG=True
-      - DJANGO_SECRET_KEY=insecure-dev-only-key
-    restart: always
+      # setting environment variables within container
+      - DJANGO_DEBUG=True # enabling Django debug mode
+      - DJANGO_SECRET_KEY=insecure-dev-only-key # setting dev-only secret key (prod may store this in .env or secrets manager)
+    restart: always # ensuring container restarts on failure
 
 volumes:
-  backend_storage:
-  backend_static:
-  backend_data: 
+  # declares named volumes used above, Docker will create them if they don't exist
+  backend_storage: # named volume for media files
+  backend_static: # named volume for static files
+  backend_data: # named volume for data files

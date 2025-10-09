@@ -2,6 +2,19 @@
 
 A Django-based file management application designed for efficient file handling and storage.
 
+## ✅ Core Features Implemented
+
+- **UserId-based access control:** All requests require a `UserId` header.
+- **Deduplication by SHA-256:** Files with identical hashes are stored once; re-uploads create reference records.
+- **Reference tracking:** Each original file reports how many reference copies exist (`reference_count`).
+- **Automatic promotion:** When an original file is deleted, one reference is promoted to be the new original.
+- **Quota enforcement:** Each user has a configurable 10 MB storage quota (dedup-aware).
+- **Rate limiting:** Throttles requests per user (`2/second`) using custom `UserIdRateThrottle`.
+- **Filtering & searching:** Support for filename search, file type, size range, and date range.
+- **Storage statistics endpoint:** Shows original usage, deduplicated usage, and storage savings.
+- **Automatic file cleanup:** Deletes the physical file from disk once all database records are gone.
+
+
 ## 🚀 Technology Stack
 
 ### Backend
@@ -62,8 +75,22 @@ docker-compose up --build
 ## 🌐 Accessing the Application
 
 - Backend API: http://localhost:8000/api
+- Example: http://localhost:8000/api/files/
+- ⚠️ **Every request must include the `UserId` header**, e.g.:
+
+```bash
+curl -H "UserId: u1" http://localhost:8000/api/files/
+```
 
 ## 📝 API Documentation
+
+### ⚙️ Required Headers
+
+Every API request **must include** a `UserId` header, for example:
+
+```bash
+-H "UserId: u1"
+```
 
 ### File Management Endpoints
 
@@ -88,8 +115,62 @@ docker-compose up --build
 - Remove a file from the system
 - Returns: 204 No Content on success
 
+#### Get Storage Stats
+- **GET** `/api/files/storage_stats/`
+- Returns per-user storage usage summary
+- Example:
+  ```json
+  {
+    "user_id": "u1",
+    "total_storage_used": 105691,
+    "original_storage_used": 211382,
+    "storage_savings": 105691,
+    "savings_percentage": 50.0
+  }
+
 #### Download File
 - Access file directly through the file URL provided in metadata
+
+## 🧪 Running Automated Tests
+
+This project includes an automated test suite validating all core behaviors:
+- Deduplication and reference creation
+- Filtering and search
+- Throttling (2 req/sec)
+- Quota enforcement
+- Delete → promotion → file cleanup
+
+### Run tests with Docker:
+```bash
+docker compose exec backend python manage.py test files -v 2
+```
+
+## 🧭 Quick API Smoke Tests
+
+List files:
+```bash
+curl -i -H "UserId: u1" http://localhost:8000/api/files/
+```
+
+Upload a file:
+```bash
+curl -i -F "file=@/path/to/sample.pdf" -H "UserId: u1" http://localhost:8000/api/files/
+```
+
+Get storage stats:
+```bash
+curl -i -H "UserId: u1" http://localhost:8000/api/files/storage_stats/
+```
+
+Throttle test:
+```bash
+for i in {1..5}; do curl -i -H "UserId: u1" http://localhost:8000/api/files/; done
+```
+
+Delete a file:
+```bash
+curl -i -X DELETE -H "UserId: u1" http://localhost:8000/api/files/{FILE_UUID}/
+```
 
 ## 🗄️ Project Structure
 

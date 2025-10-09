@@ -132,7 +132,14 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# REST Framework settings
+# FILE_VAULT centralizes knobs so you can tweak quotas/rates via env without touching code.
+# --- File Vault knobs: per-user storage quota & throttle rate (env-overridable) ---
+FILE_VAULT = {
+    'STORAGE_QUOTA_MB': int(os.getenv('STORAGE_QUOTA_MB', 10)),       # default 10 MB per user
+    'USERID_THROTTLE_RATE': os.getenv('USERID_THROTTLE_RATE', '2/second'),
+}
+
+# --- DRF config: add throttling + pagination (merge with your existing dict) ---
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny'
@@ -142,4 +149,12 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.MultiPartParser',
         'rest_framework.parsers.FormParser',
     ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'files.throttling.UserIdRateThrottle',   # new: throttle by UserId header
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'userid': FILE_VAULT['USERID_THROTTLE_RATE'],  # e.g., "2/second"
+    },
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
 }
