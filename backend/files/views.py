@@ -27,12 +27,15 @@ def _compute_sha256(dj_file):
     return hasher.hexdigest()
 
 class FileViewSet(viewsets.ModelViewSet):
+    # Standard DRF CRUD; custom permission + throttle applied globally.
     queryset = File.objects.all().order_by('-uploaded_at')
     serializer_class = FileSerializer
     permission_classes = [HasUserIdHeader]
     throttle_classes = [UserIdRateThrottle]
 
     # get_queryset applies all search/filters efficiently.
+    # This is why the list and retrieve endpoints are implicitly user-scoped.
+    # DB indexes directly support these filters.
     # ---------- Queryset scoping + filters ----------
     def get_queryset(self):
         user_id = _get_user_id(self.request)
@@ -50,7 +53,7 @@ class FileViewSet(viewsets.ModelViewSet):
         if file_type:
             qs = qs.filter(file_type=file_type)
 
-        # size range
+        # numeric size range
         try:
             min_size = int(qp.get('min_size')) if qp.get('min_size') else None
             max_size = int(qp.get('max_size')) if qp.get('max_size') else None
@@ -62,7 +65,7 @@ class FileViewSet(viewsets.ModelViewSet):
         if max_size is not None:
             qs = qs.filter(size__lte=max_size)
 
-        # date range (ISO 8601, with or without tz)
+        # date range (parse ISO with/without tz; make aware if needed)
         def _parse_iso(dt_str):
             if not dt_str:
                 return None
@@ -89,6 +92,7 @@ class FileViewSet(viewsets.ModelViewSet):
         if not file_obj:
             return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # compute metadata/basic fields
         file_hash = _compute_sha256(file_obj)
         file_size = file_obj.size
         file_type = getattr(file_obj, 'content_type', '') or ''
@@ -135,7 +139,7 @@ class FileViewSet(viewsets.ModelViewSet):
             new_row.file.name = existing_original.file.name
             new_row.save()
         else:
-            # original: save the actual content
+            # original: save the actual content, creating original row and saving uploaded bytes
             new_row = File.objects.create(
                 file=file_obj,
                 original_filename=original_filename,
@@ -158,10 +162,11 @@ class FileViewSet(viewsets.ModelViewSet):
             instance = self.get_object()
             file_hash = instance.file_hash
 
+            # If deleting an original, promote one reference to be the new original
             if not instance.is_reference:
                 ref = (
                     File.objects
-                    .select_for_update()
+                    .select_for_update() # ensures promotion is safe under concurrency.
                     .filter(original_file=instance)
                     .first()
                 )
@@ -170,8 +175,12 @@ class FileViewSet(viewsets.ModelViewSet):
                     ref.original_file = None
                     ref.save(update_fields=['is_reference', 'original_file'])
 
+            # delete DB row
+            # After super().destroy(), look for any rows with the same file_hash;
+            # if none, delete the actual file from storage.
             super().destroy(request, *args, **kwargs)
 
+            # If no rows remain for that hash, delete the on-disk (physical) file
             if not File.objects.filter(file_hash=file_hash).exists():
                 try:
                     instance.file.storage.delete(instance.file.name)
@@ -197,7 +206,9 @@ class FileViewSet(viewsets.ModelViewSet):
             seen.setdefault(f.file_hash, f.size)
         total_storage_used = sum(seen.values())
 
+        # savings: calculated difference between original storage utilized by uploads and total storage actually used
         savings = max(original_storage_used - total_storage_used, 0)
+        # savings_percentage: calculated percentage of savings
         pct = (savings / original_storage_used * 100.0) if original_storage_used else 0.0
 
         return Response({

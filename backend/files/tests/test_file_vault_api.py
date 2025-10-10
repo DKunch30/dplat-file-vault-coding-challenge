@@ -24,16 +24,19 @@ def make_file_bytes(size_bytes: int, seed: int = 123) -> bytes:
     # deterministic bytes for stable hashes
     return (seed.to_bytes(4, "big") * ((size_bytes // 4) + 1))[:size_bytes]
 
-
 class TestFileVaultAPI(APITestCase):
     """
     End-to-end tests for File Vault API:
-    - Upload + deduplication (original/reference)
-    - Filters (search/type/size/date)
-    - File types and storage stats
-    - Throttling (2 req/sec)
-    - Quota (10 MB per user)
-    - Delete → promotion → physical cleanup
+        - Upload + deduplication (original/reference) for both same user and different users
+        - Filters (search/type/size/date)
+        - File types and storage stats
+        - Throttling (2 req/sec)
+        - Quota (10 MB per user)
+        - Delete → promotion → physical cleanup
+    
+    Each test isolates MEDIA_ROOT via a temp dir and cleans up afterward.
+    We keep throttling disabled except in the specific throttling test to avoid flakiness.
+    make_file_bytes() is deterministic → stable hashes for reproducible tests.
     """
 
     def setUp(self):
@@ -106,6 +109,12 @@ class TestFileVaultAPI(APITestCase):
         return self.client.get(f"{self.base}storage_stats/", **headers)
 
     # ------------------ tests ------------------
+    '''
+        Upload + dedup same user
+            First upload → original
+            Second upload (same bytes) → reference with original_file set
+            Asserts is_reference and hash equality.
+    '''
     def test_01_upload_and_dedup_same_user(self):
         content = make_file_bytes(102_400, seed=7)
         h = sha256_bytes(content)
@@ -128,6 +137,59 @@ class TestFileVaultAPI(APITestCase):
         self.assertEqual(r_get.status_code, 200)
         self.assertEqual(r_get.json()["reference_count"], 1)
 
+    '''
+        Upload + dedup different user
+            First upload → original
+            Second upload (same bytes) → reference with original_file set
+            Asserts is_reference and hash equality.
+    '''
+    def test_01b_upload_and_dedup_different_user(self):
+        # Same content uploaded by two different users:
+        # u1 should get the original; u2 should get a reference to u1's original.
+        content = make_file_bytes(102_400, seed=7)
+        h = sha256_bytes(content)
+
+        # u1 upload -> original
+        r1 = self._upload_bytes(content, "doc.pdf", self.h_u1)
+        self.assertEqual(r1.status_code, 201)
+        d1 = r1.json()
+        self.assertFalse(d1["is_reference"])
+        self.assertIsNone(d1["original_file"])
+        self.assertEqual(d1["file_hash"], h)
+
+        # (small pause to avoid throttle noise)
+        time.sleep(0.2)
+
+        # u2 upload same bytes -> reference to u1's original
+        r2 = self._upload_bytes(content, "doc.pdf", self.h_u2)
+        self.assertEqual(r2.status_code, 201)
+        d2 = r2.json()
+        self.assertTrue(d2["is_reference"])
+        self.assertEqual(d2["original_file"], d1["id"])
+        self.assertEqual(d2["file_hash"], h)
+
+        # Fetch u1's original; reference_count should reflect u2's reference (excludes original)
+        r_get = self._retrieve(d1["id"], self.h_u1)
+        self.assertEqual(r_get.status_code, 200)
+        self.assertEqual(r_get.json()["reference_count"], 1)
+
+        # (Optional) Prove per-user storage accounting:
+        # u1 has 1 unique hash -> total_storage_used = size
+        # u2 also has 1 unique hash (even though it's a reference) -> total_storage_used = size
+        st1 = self.client.get(f"{self.base}storage_stats/", **self.h_u1)
+        st2 = self.client.get(f"{self.base}storage_stats/", **self.h_u2)
+        self.assertEqual(st1.status_code, 200)
+        self.assertEqual(st2.status_code, 200)
+        self.assertEqual(st1.json()["total_storage_used"], len(content))
+        self.assertEqual(st2.json()["total_storage_used"], len(content))
+
+
+    '''
+        Upload different File types and storage stats:
+            Upload PDF and PNG
+            Call /file_types/ and /storage_stats/
+            Asserts file types and storage stats are reasonable values.
+    '''
     def test_02_file_types_and_storage_stats(self):
         pdf = make_file_bytes(50_000, seed=11)
         png = make_file_bytes(60_000, seed=12)
@@ -151,6 +213,13 @@ class TestFileVaultAPI(APITestCase):
         self.assertGreater(rs["original_storage_used"], rs["total_storage_used"])
         self.assertGreater(rs["storage_savings"], 0)
 
+    '''
+        Filters, search, size, date:
+            Upload small and big files
+            search, min_size, and start_date/end_date (ISO 8601)
+            Call /list/ with filters
+            Asserts results match constraints.
+    '''
     def test_03_filters_search_size_date(self):
         content_small = make_file_bytes(10_000, seed=21)
         content_big = make_file_bytes(200_000, seed=22)
@@ -175,6 +244,11 @@ class TestFileVaultAPI(APITestCase):
         self.assertEqual(q3.status_code, 200)
         self.assertGreaterEqual(q3.json()["count"], 2)
 
+    '''
+        Throttling (userid):
+            Re-enable throttling (UserIdRateThrottle) only here
+            asserts 3rd call within a second returns 429 then recovers after 1s
+    '''
     def test_04_throttling_userid(self):
         # re-enable throttling only here
         FileViewSet.throttle_classes = [UserIdRateThrottle]
@@ -208,6 +282,15 @@ class TestFileVaultAPI(APITestCase):
 
         FileViewSet.throttle_classes = []
 
+    '''
+        Quota enforcement (per-user):
+            With 10 MB quota,
+            Upload 6 MB file.
+            Asserts success ok.
+            Upload 5 MB file
+            Asserts quota exceeded 429 (“Storage Quota Exceeded”).
+            This validates dedup-aware quota math.
+    '''
     def test_05_quota_enforcement_per_user(self):
         six_mb = make_file_bytes(6 * 1024 * 1024, seed=31)
         five_mb = make_file_bytes(5 * 1024 * 1024, seed=32)
@@ -219,6 +302,15 @@ class TestFileVaultAPI(APITestCase):
         self.assertEqual(over.status_code, 429)
         self.assertIn("Storage Quota Exceeded", over.json().get("detail", ""))
 
+    '''
+        Delete, promotion, and physical cleanup:
+            Upload same file twice
+            Asserts original and reference are reasonable.
+            Delete original
+            Asserts reference is promoted to original and physical cleanup.
+            Delete the promoted one; 
+            Verifies the physical file is removed when no DB rows remain for that hash.
+    '''
     def test_06_delete_promotion_and_physical_cleanup(self):
         data = make_file_bytes(80_000, seed=41)
 

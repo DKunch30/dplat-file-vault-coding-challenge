@@ -1,3 +1,13 @@
+'''
+    Represents a file entry with deduplication. Two kinds of rows:
+        Original (is_reference=False): owns the physical bytes on disk.
+        Reference (is_reference=True): points to the original; no bytes duplicated.
+    Invariant: if is_reference==True, original_file MUST be non-null.
+    Application logic guarantees only one physical copy per unique file_hash.
+    We intentionally do not put a uniqueness constraint on file_hash because
+    multiple rows (original + many references) share the same hash.
+'''
+
 from django.db import models
 import uuid
 import os
@@ -7,6 +17,7 @@ def file_upload_path(instance, filename):
     Generate a collision-resistant path inside MEDIA_ROOT/uploads/ for the
     physical file. We keep the user-visible name in `original_filename`,
     and store a UUID filename on disk to avoid collisions and weird characters.
+    Store physical file as uploads/<uuid>.<ext>
     """
     ext = filename.split('.')[-1] if '.' in filename else ''
     filename = f"{uuid.uuid4()}.{ext}" if ext else str(uuid.uuid4())
@@ -18,7 +29,7 @@ class File(models.Model):
 
     - Originals (is_reference=False) store bytes on disk (`file`); `original_file` is NULL.
     - References (is_reference=True) reuse the same on-disk file; `original_file` points to the original row.
-    - All rows with identical content share the same `file_hash`.
+    - All rows with identical content share the same SHA-256 hash `file_hash`.
 
     Common filters indexed: file_hash, user_id, file_type, uploaded_at.
     """
@@ -36,7 +47,7 @@ class File(models.Model):
     # The user_id helps us to filter and limit by owner
     user_id = models.CharField(max_length=64, db_index=True)
     # The file_hash helps us enable fast dedup look up (SHA-256 hex of content)
-    file_hash = models.CharField(max_length=64, db_index=True)  # SHA-256 hex
+    file_hash = models.CharField(max_length=64, db_index=True) 
     # is_reference and original_file helps cleanly represent dedup so only one physical copy exists
     is_reference = models.BooleanField(default=False) # True if this is a reference file (points to another file)
     original_file = models.ForeignKey(
