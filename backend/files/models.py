@@ -1,7 +1,6 @@
 from django.db import models
 import uuid
 import os
-from django.db.models import Q
 
 def file_upload_path(instance, filename):
     """
@@ -58,24 +57,7 @@ class File(models.Model):
             models.Index(fields=['file_type']),
             models.Index(fields=['uploaded_at']),
         ]
-
-        # Making data model more robust.
-        # Works on SQLite and Postgres (Django’s conditional UniqueConstraint). 
-        # App logic already behaves this way. This just enforces it at the DB level.
-        constraints = [
-            models.UniqueConstraint(
-                fields=['file_hash'],
-                condition=Q(is_reference=False),
-                name='unique_original_per_hash',
-            ),
-            models.CheckConstraint(
-                name='reference_link_consistency',
-                check=(
-                    (Q(is_reference=False) & Q(original_file__isnull=True)) |
-                    (Q(is_reference=True)  & Q(original_file__isnull=False))
-                ),
-            ),
-        ]
+        
 
     @property
     def reference_count(self):
