@@ -18,8 +18,7 @@ from .views import FileViewSet
 # exposes any @action methods you define on the ViewSet.
 router = DefaultRouter()
 
-# basename='files' sets the internal route name (e.g., 'files-list', 'files-detail'),
-# and ensures reverse() works even if the queryset is set dynamically in the viewset.
+# From this single line, DRF auto-generates the routes listed above.
 router.register(r'files', FileViewSet)
 
 # Expose all router-generated URLs under this app.

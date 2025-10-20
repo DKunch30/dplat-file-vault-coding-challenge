@@ -11,6 +11,9 @@ class FileSerializer(serializers.ModelSerializer):
     # Exposes fields required by the API contract (including reference_count, is_reference, original_file).
     # original_file is presented as the FK id.
     reference_count = serializers.SerializerMethodField()
+
+    # Tells Django REST framework to include UUID of original file in API response rather than serializing the entire related object
+    # Read only so clients can see which original file duplicate points to but can't change it
     original_file = serializers.UUIDField(source='original_file_id', read_only=True)
 
     class Meta:

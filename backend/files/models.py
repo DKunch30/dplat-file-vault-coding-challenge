@@ -44,24 +44,32 @@ class File(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True, db_index=True) # when the file was uploaded
 
     # Dedup (content identity) + ownership
-    # The user_id helps us to filter and limit by owner
-    user_id = models.CharField(max_length=64, db_index=True)
+    # The user_id helps us to filter and limit by owner (faster lookups like hash table)
+    user_id = models.CharField(max_length=64, db_index=True) # create database index on column, jump directly to matching rows instead of scanning entire table
     # The file_hash helps us enable fast dedup look up (SHA-256 hex of content)
     file_hash = models.CharField(max_length=64, db_index=True) 
     # is_reference and original_file helps cleanly represent dedup so only one physical copy exists
     is_reference = models.BooleanField(default=False) # True if this is a reference file (points to another file)
+    
+    # declares a foreign key called original_file that connects a file record to another record 
+    # in the same table — specifically, the “original” version of a file when deduplication occurs
+    # Starts as None with new file, duplicate upload points to original file ID, if orignial deleted, field on reference becomes NULL
     original_file = models.ForeignKey(
-        'self',
+        'self', # this foreign key points to the same model (links one file instance to another)
+        # allow the field to be empty in both the database (null=True) and forms (blank=True)
+        # original files don't have an original_file, only duplicates do
         null=True,
         blank=True,
+        # Setting up reverse relationship to access all references to a file (original.references.all())
         related_name='references', # original.references -> all references pointing to it
-        on_delete=models.SET_NULL, # if original is deleted, references are kept (we promote one to new original)
+        on_delete=models.SET_NULL, # if original is deleted, references are kept (we promote one to new original). This makes sure we don't delete the references too
     )
 
     class Meta:
         # default ordering: show newest uploads first
         ordering = ['-uploaded_at']
         # Indexes optimize the list filters and hash lookups
+        # Jump directly to matching rows instead of scanning entire table
         indexes = [
             models.Index(fields=['file_hash']),
             models.Index(fields=['user_id', 'file_hash']),
